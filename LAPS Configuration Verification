@@ -1,0 +1,62 @@
+Introduction
+------------
+Local Administrator Password Solution (LAPS) creates a new attribute for computer objects, mS-MCS-AdmPwd, where the password of the local administrator account on the domain-joined computers is stored as clear-text.
+
+The following accounts have access to this attribute by default:
+
+* Domain Administrator group members
+* SYSTEM on the domain-joined computers that have the LAPS agent installed
+* User accounts and group members with 'All Extended Rights' to an OU or with 'CONTROL_ACCESS' or 'READ' permissions on the mS-MCS-AdmPwd attribute
+
+This means that if the organisation does not delegate permissions to this attribute, there is no avenue of attack. The only issue is potentially compliance to something like PCI-DSS due to the clear-text password.
+
+One special note: Domain Controllers in the environment must be greater than Server 2003 and have a greater functional level, otherwise the confidential attribute security controls do not work. For the first part of this, see:
+
+Import-Module ActiveDirectory
+$DCs = Get-ADDomainController
+$DCs | select HostName, OperatingSystem, OperatingSystemHotfix, OperatingSystemServicePack, OperatingSystemVersion
+
+For the second:
+
+Get-ADDomain | fl Name,DomainMode
+Get-ADForest | fl Name,ForestMode
+
+Validating Access Rights
+------------------------
+Download the PowerShellAccessControl Module from the Microsoft Script Center by Rohn Edwards. After installing this module, the following can be used for targetting a specific OU permissions as it relates to LAPS:
+
+Import-Module PowerShellAccessControl
+Import-Module ActiveDirectory
+$OU = Get-ADOrganizationalUnit "OU=OU,DC=domain,DC=local"
+$OU | Get-AccessControlEntry -ObjectAceType 'ms-Mcs-AdmPwd' -ActiveDirectoryRights ExtendedRight
+
+Something new to look into: Get-AdmPwdPassword
+
+Suggested Trick #1
+------------------
+Ensure you disable the default SID-500 local administrator account and create a new and re-named local administrator account. There is a degree of security through obscurity in this practise, but it is generally accepted to be worth it.
+
+Suggested Trick #2
+------------------
+https://github.com/lithnet/access-manager
+https://int64software.com/overlaps/
+
+A free and open source project like Lithnet or OverLAPS lets you remove the control agent from workstations and add access logging for who is checking out passwords. You can ultimately start using MFA for access as well.
+
+This product is just an example.
+
+Suggested Trick #3
+------------------
+Depending on your environment and team, you may want to link a GPO to your Domain Controllers OU with all LAPS settings set to 'Disabled'. This prevents accidental deployments of LAPS to a DC. Not necessary in the businesses I have worked with, but I've also seen mistakes being made by some IT teams when I've consulted where a technical control was a shade better than more adminsitrative control attempts.
+
+Suggested Trick #4
+------------------
+While I usually set password expirations to be 14 days, itis useful to often set the expiration date to be +24 hours after someone checks out a password through something like Lithnet Access Manager. If you are using a software overlay, this is worth considering as if a user does get a password, it will stop working fairly soon thereafter, but also allowing enoguh time to complete a task that might have been an emergency C-level assignment.
+
+Disaster Recovery Considerations
+--------------------------------
+One important design and planning consideration is what happens in the event that IT loses access to Active Directory. If all local administrator passwords (workstations? servers?) are stored in AD, you no longer have access to log into any device that was managed by LAPS.
+
+This should be covered in the AD DR procedures.
+
+Microsoft does not recommend using LAPS on the domain controllers themselves. Securing Domain Administrator account is another topic.
